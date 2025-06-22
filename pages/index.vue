@@ -52,7 +52,8 @@
               <p class="font-bold text-blue-600">{{ donation.amount }} ETH</p>
               <p class="text-sm text-slate-600">Dari: <span class="font-mono text-xs">{{ donation.name }}</span></p>
               <p class="text-sm text-slate-600">Pesan: "{{ donation.message }}"</p>
-              <p class="text-xs text-slate-400 mt-2">{{ donation.timestamp }}</p>
+              <p class="text-sm text-black mt-2 font-semibold">{{ donation.to }}</p>
+              <p class="text-xs text-slate-400">{{ donation.timestamp }}</p>
             </div>
           </div>
           <div v-else class="text-center text-slate-500">Belum ada donasi.</div>
