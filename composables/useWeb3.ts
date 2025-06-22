@@ -2,23 +2,22 @@ import { ref } from 'vue';
 import { ethers, type BrowserProvider, type JsonRpcSigner } from 'ethers';
 import { contractABI } from '~/utils/abi';
 
-// State yang tidak butuh konteks Nuxt (seperti ref biasa) aman untuk didefinisikan di sini.
+// Mengambil alamat kontrak dari .env
+
+
+// State reaktif untuk digunakan di seluruh aplikasi dengan tipe yang eksplisit
 const account = ref<string | null>(null);
 const isLoading = ref<boolean>(false);
 const errorMessage = ref<string>('');
 
-// Ini adalah fungsi utama composable Anda.
-// Semua hook Nuxt (yang diawali 'use') harus berada di dalamnya.
 export function useWeb3() {
-    // --- PINDAHKAN KODE YANG BERMASALAH KE DALAM SINI ---
+
     const runtimeConfig = useRuntimeConfig();
     const contractAddress = runtimeConfig.public.contractAddress as string;
-    // --- SELESAI DIPINDAHKAN ---
 
-    // Fungsi untuk menghubungkan ke wallet
+    // Fungsi connectWallet tidak perlu diubah
     const connectWallet = async () => {
         if (process.server) return;
-
         errorMessage.value = '';
         isLoading.value = true;
         try {
@@ -31,12 +30,13 @@ export function useWeb3() {
             account.value = userAddress;
         } catch (error: any) {
             errorMessage.value = error.message || "Gagal menghubungkan wallet.";
+            console.error("Connection Error:", error);
         } finally {
             isLoading.value = false;
         }
     };
 
-    // Fungsi untuk mengirim donasi
+    // --- FUNGSI sendDonation YANG KITA PERBAIKI ---
     const sendDonation = async (recipient: string, name: string, message: string, amount: string) => {
         if (process.server) return null;
 
@@ -47,22 +47,39 @@ export function useWeb3() {
         
         isLoading.value = true;
         errorMessage.value = '';
+
         try {
             const ethProvider = new ethers.BrowserProvider(window.ethereum);
             const currentSigner = await ethProvider.getSigner();
 
-            // `contractAddress` sekarang bisa diakses dengan aman di sini
             const donationContract = new ethers.Contract(contractAddress, contractABI, currentSigner);
             const amountInWei = ethers.parseEther(amount);
 
-            const tx = await donationContract.sendDonation(name, message, recipient, { value: amountInWei });
+            // Meminta MetaMask untuk menandatangani dan mengirim transaksi
+            const tx = await donationContract.sendDonation(name, message, recipient, { 
+                value: amountInWei 
+            });
+
+            // Menunggu transaksi selesai
             await tx.wait();
             return tx;
+
         } catch (error: any) {
-            if (error.code === 'ACTION_REJECTED') {
-                 errorMessage.value = "Anda menolak transaksi di MetaMask.";
+            // --- BLOK PENANGANAN ERROR YANG LEBIH PINTAR ---
+            // Kita tetap log error lengkapnya di console untuk debugging
+            console.error("Full Donation Error Object:", error);
+
+            // Cek kode error spesifik dari Ethers.js/MetaMask
+            // 'code' bisa ada di level atas atau di dalam objek 'error'
+            const errorCode = error.code || error?.error?.code;
+
+            if (errorCode === 'INSUFFICIENT_FUNDS' || errorCode === -32003) {
+                errorMessage.value = "Transaksi gagal: Saldo Anda tidak cukup untuk mengirim donasi ini beserta biaya gas.";
+            } else if (errorCode === 'ACTION_REJECTED' || errorCode === 4001) {
+                errorMessage.value = "Anda membatalkan atau menolak transaksi di MetaMask.";
             } else {
-                 errorMessage.value = error.message || "Terjadi kesalahan saat mengirim donasi.";
+                // Fallback untuk error lainnya yang tidak terduga
+                errorMessage.value = "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi.";
             }
             return null;
         } finally {
@@ -70,7 +87,6 @@ export function useWeb3() {
         }
     };
 
-    // Kembalikan semua state dan fungsi yang dibutuhkan oleh komponen
     return {
         account,
         isLoading,
